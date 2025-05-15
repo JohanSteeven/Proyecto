@@ -1,76 +1,51 @@
 import subprocess
-import os
 
-def evaluar():
+def evaluar(ip_o_dominio: str):
     resultado = {}
 
-    # 1. Accesos prohibidos por defecto (firewall DROP por defecto)
+    # 1. Servicios de acceso remoto comunes (SSH, RDP, VPN, VNC)
     try:
-        rules = subprocess.check_output(["sudo", "iptables", "-L", "INPUT", "-n"], text=True)
-        resultado["acceso_por_defecto"] = "policy DROP" in rules or "DROP" in rules
+        acceso_remoto = subprocess.check_output([
+            "nmap", "-p", "22,23,3389,1194,5900", "--script",
+            "ssh2-enum-algos,rdp-enum-encryption,vnc-info,telnet-encryption", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["servicios_acceso_logico"] = acceso_remoto
+    except subprocess.CalledProcessError as e:
+        resultado["servicios_acceso_logico"] = e.output
     except Exception as e:
-        resultado["acceso_por_defecto"] = str(e)
+        resultado["servicios_acceso_logico"] = str(e)
 
-    # 2. Verificar que Telnet y FTP estén deshabilitados
+    # 2. Firewall y detección de filtrado
     try:
-        ports = subprocess.check_output(["ss", "-tuln"], text=True)
-        resultado["telnet_habilitado"] = ":23" in ports
-        resultado["ftp_habilitado"] = ":21" in ports
+        firewall = subprocess.check_output([
+            "nmap", "-Pn", "--reason", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["deteccion_firewall"] = firewall
+    except subprocess.CalledProcessError as e:
+        resultado["deteccion_firewall"] = e.output
     except Exception as e:
-        resultado["telnet_ftp_verificacion"] = str(e)
+        resultado["deteccion_firewall"] = str(e)
 
-    # 3. SSH versión 2 habilitado
+    # 3. Verificar puertos y servicios comunes habilitados (baseline)
     try:
-        ssh_config = open("/etc/ssh/sshd_config").read()
-        resultado["ssh_version"] = "Protocol 2" in ssh_config
+        puertos = subprocess.check_output([
+            "nmap", "-sS", "-p", "1-1024", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["puertos_basicos_abiertos"] = puertos
+    except subprocess.CalledProcessError as e:
+        resultado["puertos_basicos_abiertos"] = e.output
     except Exception as e:
-        resultado["ssh_version"] = str(e)
+        resultado["puertos_basicos_abiertos"] = str(e)
 
-    # 4. Verificar uso de VPN (chequeo de tun0 activo)
+    # 4. Revisar servicios inseguros conocidos (nmap default scripts)
     try:
-        interfaces = subprocess.check_output(["ip", "addr"], text=True)
-        resultado["vpn_activa"] = "tun0" in interfaces
+        inseguros = subprocess.check_output([
+            "nmap", "--script", "default", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["servicios_inseguros"] = inseguros
+    except subprocess.CalledProcessError as e:
+        resultado["servicios_inseguros"] = e.output
     except Exception as e:
-        resultado["vpn_activa"] = str(e)
-
-    # 5. Verificar uso de algoritmos robustos en SSH (ej: AES-256)
-    try:
-        strong_ciphers = ["aes256", "chacha20"]
-        resultado["algoritmos_robustos_ssh"] = any(cipher in ssh_config.lower() for cipher in strong_ciphers)
-    except Exception as e:
-        resultado["algoritmos_robustos_ssh"] = str(e)
-
-    # 6. Verificar políticas de firewall definidas
-    try:
-        firewalld_active = subprocess.check_output(["sudo", "ufw", "status"], text=True)
-        resultado["firewall_activo"] = "Status: active" in firewalld_active
-    except Exception as e:
-        resultado["firewall_activo"] = str(e)
-
-    # 7. Verificar segmentación de red (subredes y bridges definidos)
-    try:
-        ip_link = subprocess.check_output(["ip", "link"], text=True)
-        resultado["segmentacion_red"] = any(x in ip_link for x in ["br-", "vlan", "eth0", "eth1"])
-    except Exception as e:
-        resultado["segmentacion_red"] = str(e)
-
-    # 8. Verificar acceso limitado a hosts del dominio (resolución interna DNS/local)
-    try:
-        hosts = open("/etc/hosts").read()
-        resultado["hosts_dominio_local"] = any(".local" in line for line in hosts.splitlines())
-    except Exception as e:
-        resultado["hosts_dominio_local"] = str(e)
-
-    # 9. Verificar monitoreo de dispositivos fuera del dominio (ej: logs de dhcpd)
-    try:
-        dhcp_log = "/var/log/syslog"
-        if os.path.exists(dhcp_log):
-            with open(dhcp_log, "r") as f:
-                contenido = f.read()
-                resultado["dispositivos_fuera_dominio"] = "DHCPACK" in contenido
-        else:
-            resultado["dispositivos_fuera_dominio"] = "no log dhcp"
-    except Exception as e:
-        resultado["dispositivos_fuera_dominio"] = str(e)
+        resultado["servicios_inseguros"] = str(e)
 
     return resultado

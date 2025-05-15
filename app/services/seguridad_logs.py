@@ -1,43 +1,39 @@
 import subprocess
-from datetime import datetime, timedelta
-import os
 
-def evaluar():
+def evaluar(ip_o_dominio: str):
     resultado = {}
 
-    # 1. Verificar existencia y contenido reciente en logs como /var/log/auth.log
+    # 1. Detectar servicio NTP activo
     try:
-        path = "/var/log/auth.log"
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                lines = f.readlines()
-                resultado["log_auth_existente"] = True
-                resultado["eventos_recientes"] = len(lines[-50:])
-        else:
-            resultado["log_auth_existente"] = False
+        ntp = subprocess.check_output([
+            "nmap", "-sU", "-p", "123", "--script", "ntp-info", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["ntp"] = ntp
+    except subprocess.CalledProcessError as e:
+        resultado["ntp"] = e.output
     except Exception as e:
-        resultado["log_auth_existente"] = str(e)
+        resultado["ntp"] = str(e)
 
-    # 2. Verificar sincronización de hora (NTP activo)
+    # 2. Detectar syslog o servicios similares (UDP 514)
     try:
-        ntp_status = subprocess.check_output(["timedatectl"], text=True)
-        resultado["ntp_sincronizado"] = "synchronized: yes" in ntp_status.lower()
+        syslog = subprocess.check_output([
+            "nmap", "-sU", "-p", "514", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["syslog"] = syslog
+    except subprocess.CalledProcessError as e:
+        resultado["syslog"] = e.output
     except Exception as e:
-        resultado["ntp_sincronizado"] = str(e)
+        resultado["syslog"] = str(e)
 
-    # 3. Verificar existencia de logs de auditoría (auditd)
+    # 3. Inspección de headers HTTP por pistas de logging
     try:
-        auditd_status = subprocess.check_output(["sudo", "auditctl", "-s"], text=True)
-        resultado["auditd_activo"] = "enabled 1" in auditd_status.lower()
+        headers = subprocess.check_output([
+            "nmap", "-p", "80,443", "--script", "http-headers", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["http_headers"] = headers
+    except subprocess.CalledProcessError as e:
+        resultado["http_headers"] = e.output
     except Exception as e:
-        resultado["auditd_activo"] = str(e)
+        resultado["http_headers"] = str(e)
 
-    # 4. Verificar logs con información de qué, quién, cuándo y dónde
-    try:
-        fields_detected = all(
-            any(field in line.lower() for field in ["user", "tty", "date", "session"]) for line in lines[-100:]
-        ) if lines else False
-        resultado["formato_logs_valido"] = fields_detected
-    except Exception as e:
-        resultado["formato_logs_valido"] = str(e)
     return resultado
