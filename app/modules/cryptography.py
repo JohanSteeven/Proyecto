@@ -1,73 +1,78 @@
-import nmap
-from datetime import datetime
+import subprocess
+import re
 
-# Listado de cifrados débiles que queremos detectar
-WEAK_CIPHERS = ['rc4', 'md5', 'sha1', 'des', '3des', 'cbc', 'md4']
+def evaluate(ip_o_dominio: str) -> dict:
+    resultado = {}
 
-def evaluate(ip):
-    scanner = nmap.PortScanner()
+    try:
+        # 1. Escanear cifrados SSL/TLS en puertos comunes usando nmap ssl-enum-ciphers
+        ssl_ciphers = subprocess.check_output([
+            "nmap", "-p", "443,465,993,995,8443",
+            "--script", "ssl-enum-ciphers", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=90)
+        resultado["ssl_ciphers_raw"] = ssl_ciphers
 
-    # Escaneo con scripts para certificado y cifrados SSL/TLS
-    scanner.scan(ip, arguments='-p 443 --script ssl-cert,ssl-enum-ciphers')
+        lines = ssl_ciphers.splitlines()
 
-    resultados = {
-        "certificado": {},
-        "cifrados_debiles": [],
-        "tls_versiones": [],
-        "alertas": []
-    }
+        # Detectar protocolos inseguros SSLv2, SSLv3
+        protocolos_inseguros = [p for p in ("SSLv2", "SSLv3") if any(p in l for l in lines)]
+        resultado["protocolos_inseguros"] = protocolos_inseguros
 
-    for host in scanner.all_hosts():
-        # Revisar puerto 443 o cualquier puerto con ssl-enum-ciphers
-        for proto in scanner[host].all_protocols():
-            ports = scanner[host][proto].keys()
-            for port in ports:
-                scripts = scanner[host][proto][port].get('scripts', {})
+        # Detectar algoritmos inseguros RC4, MD5, SHA1, CBC
+        algoritmos_inseguros = sorted({algo for algo in ("RC4", "MD5", "SHA1", "CBC") for l in lines if algo in l})
+        resultado["algoritmos_inseguros"] = algoritmos_inseguros
 
-                # Info del certificado
-                if 'ssl-cert' in scripts:
-                    cert_info = scripts['ssl-cert']
+        # Suites con claves menores a 256 bits
+        suites_bajas = []
+        for l in lines:
+            m = re.search(r"(\d+)\s*bits", l)
+            if m and int(m.group(1)) < 256:
+                suites_bajas.append(l.strip())
+        resultado["suites_claves_menor_256"] = suites_bajas
 
-                    resultados['certificado']['issuer'] = cert_info.get('issuer', 'desconocido')
-                    resultados['certificado']['subject'] = cert_info.get('subject', 'desconocido')
-                    resultados['certificado']['valid_from'] = cert_info.get('notbefore', 'desconocido')
-                    resultados['certificado']['valid_until'] = cert_info.get('notafter', 'desconocido')
+        # Detectar algoritmos robustos (AES-256, RSA >=2048, ECC, ECDSA)
+        patrones_fuertes = ("AES-256", "RSA", "ECDHE", "ECDSA", "CHACHA20-POLY1305")
+        algoritmos_robustos = sorted({pat for pat in patrones_fuertes for l in lines if pat.lower() in l.lower()})
+        resultado["algoritmos_robustos"] = algoritmos_robustos
 
-                    # Validar fechas del certificado
-                    try:
-                        not_after = datetime.strptime(cert_info.get('notafter'), '%b %d %H:%M:%S %Y %Z')
-                        if not_after < datetime.now():
-                            resultados['alertas'].append('Certificado TLS expirado')
-                    except Exception:
-                        resultados['alertas'].append('No se pudo verificar vigencia del certificado')
+    except Exception as e:
+        resultado["error_ssl_ciphers"] = str(e)
 
-                # Info de cifrados
-                if 'ssl-enum-ciphers' in scripts:
-                    cipher_report = scripts['ssl-enum-ciphers']
+    try:
+        # 2. Escanear cifrados SSH y algoritmos con ssh2-enum-algos script
+        ssh_algos = subprocess.check_output([
+            "nmap", "-p", "22",
+            "--script", "ssh2-enum-algos", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["ssh_algos_raw"] = ssh_algos
 
-                    # Extraemos las versiones TLS detectadas
-                    tls_versions = []
-                    weak_ciphers_found = []
-                    lines = cipher_report.split('\n')
-                    for line in lines:
-                        line_lower = line.lower()
-                        # Buscar versiones TLS
-                        if 'tls' in line_lower or 'ssl' in line_lower:
-                            # Ejemplo: TLSv1.2, TLSv1.3 etc.
-                            tls_versions.append(line.strip())
-                        # Buscar cifrados débiles
-                        for weak in WEAK_CIPHERS:
-                            if weak in line_lower:
-                                weak_ciphers_found.append(line.strip())
+        ssh_lines = ssh_algos.splitlines()
 
-                    resultados['tls_versiones'] = list(set(tls_versions))
-                    resultados['cifrados_debiles'] = list(set(weak_ciphers_found))
-                    if weak_ciphers_found:
-                        resultados['alertas'].append('Se detectaron cifrados débiles en TLS/SSL')
+        # Buscar algoritmos inseguros SSH (ej: diffie-hellman-group1-sha1)
+        ssh_inseguros = []
+        for l in ssh_lines:
+            if re.search(r"(diffie-hellman-group1-sha1|ssh-rsa)", l, re.I):
+                ssh_inseguros.append(l.strip())
+        resultado["ssh_algoritmos_inseguros"] = ssh_inseguros
 
-    if not resultados['certificado']:
-        resultados['alertas'].append('No se detectó certificado TLS en el puerto 443')
-    if not resultados['tls_versiones']:
-        resultados['alertas'].append('No se detectaron versiones TLS/SSL')
+        # Buscar algoritmos fuertes SSH (ej: ecdh-sha2-nistp256, chacha20-poly1305@openssh.com)
+        ssh_fuertes = []
+        for l in ssh_lines:
+            if re.search(r"(ecdh-sha2-nistp|chacha20-poly1305@openssh.com|aes256-ctr)", l, re.I):
+                ssh_fuertes.append(l.strip())
+        resultado["ssh_algoritmos_fuertes"] = ssh_fuertes
 
-    return resultados
+    except Exception as e:
+        resultado["error_ssh_algos"] = str(e)
+
+    try:
+        # 3. Validar certificados X.509 con ssl-cert script
+        ssl_cert = subprocess.check_output([
+            "nmap", "-p", "443",
+            "--script", "ssl-cert", ip_o_dominio
+        ], stderr=subprocess.STDOUT, text=True, timeout=60)
+        resultado["ssl_cert"] = ssl_cert
+    except Exception as e:
+        resultado["error_ssl_cert"] = str(e)
+
+    return resultado
