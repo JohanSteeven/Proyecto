@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from modules import cybersecurity, cryptography
+from modules import cybersecurity, cryptography, software_apps
 
 app = Flask(__name__)
 
@@ -18,7 +18,8 @@ def evaluate():
 
     resultados ={ 
                  "Ciberseguridad":cybersecurity.evaluate(ip),
-                 "Criptografia":cryptography.evaluate(ip)
+                 "Criptografia":cryptography.evaluate(ip),
+                 "Software":software_apps.evaluate(ip)
                  }
     
     return jsonify(resultados)
