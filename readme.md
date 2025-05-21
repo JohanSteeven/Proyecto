@@ -1,114 +1,37 @@
+# API de Evaluación Automática de Seguridad — Parámetros Implementados
 
-
-# API de Evaluación de Seguridad
-
-Esta API permite evaluar automáticamente diferentes parámetros de seguridad relacionados con una IP o dominio, mediante módulos especializados que analizan aspectos de ciberseguridad y criptografía.
+Este documento detalla los parámetros de seguridad que cada módulo implementado en la API evalúa sobre la IP o dominio remoto.
 
 ---
 
-## Módulos disponibles y parámetros evaluados
+## 1. Módulo `cybersecurity.py`
 
-### 1. Módulo: Evaluación de Ciberseguridad (`cybersecurity.py`)
-
-Este módulo realiza un escaneo externo para detectar vulnerabilidades comunes y configuraciones inseguras.
-
-**Parámetros evaluados:**
-
-- Puertos abiertos y servicios activos.
-- Protocolos inseguros (FTP, Telnet, SMBv1, etc.).
-- Versiones vulnerables de servicios (ej. SSH v1).
-- Cifrados débiles detectados en protocolos.
-- Servicios predeterminados o inseguros habilitados.
-- Alertas críticas sobre configuraciones inseguras.
+- Puertos abiertos y servicios detectados.
+- Detección de servicios inseguros:
+  - FTP sin cifrado.
+  - Telnet habilitado.
+  - SMBv1 vulnerable.
+  - RDP sin autenticación.
+  - SMTP sin cifrado.
+- Algoritmos débiles en TLS/SSL (RC4, MD5, SHA1, CBC).
 
 ---
 
-### 2. Módulo: Evaluación de Criptografía (`cryptography.py`)
+## 2. Módulo `cryptography.py`
 
-Analiza mecanismos criptográficos en comunicación TLS/SSL del objetivo.
-
-**Parámetros evaluados:**
-
-- Transmisión cifrada con TLS 1.2 o superior.
-- Certificados digitales válidos y vigentes.
-- Uso de algoritmos criptográficos fuertes (AES-256, RSA-2048, ECC).
-- Eliminación de cifrados y hashes débiles (RC4, CBC, MD5, SHA1, etc.).
-- Versiones TLS activas y ausencia de SSL obsoleto.
-- Cifrado adecuado de datos sensibles en tránsito.
-- Alertas sobre configuraciones criptográficas inseguras.
-
-**Parámetros no evaluables automáticamente:**
-
-- Registro de actividades criptográficas internas.
-- Gestión segura de claves criptográficas.
-- Cifrado de datos en reposo y medios de respaldo externos.
+- Protocolos TLS/SSL inseguros detectados (SSLv2, SSLv3).
+- Algoritmos criptográficos inseguros (RC4, MD5, SHA1, CBC).
+- Algoritmos criptográficos robustos (AES-256, RSA 2048+, ECDHE, ECDSA, ChaCha20).
+- Certificados digitales válidos con detalle de emisor, validez, tamaño clave y algoritmo de firma.
+- Algoritmos SSH inseguros y robustos.
 
 ---
 
-## Requisitos e instalación
+## 3. Módulo `software_apps.py`
 
-1. Clona este repositorio.
-
-2. Crea y activa un entorno virtual:
-
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/macOS
-source venv/bin/activate
-````
-
-3. Instala dependencias:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. Asegúrate de tener instalado `nmap` con scripts `ssl-cert` y `ssl-enum-ciphers`.
+- Encabezados HTTP expuestos (puertos 80, 443, 8080).
+- Detección de páginas de ejemplo, respaldo o test accesibles.
+- Verificación de flags de seguridad en cookies HTTP (`Secure`, `HttpOnly`).
 
 ---
-
-## Ejecución
-
-Inicia el servidor Flask:
-
-```bash
-python app.py
-```
-
-La API estará disponible en: `http://127.0.0.1:5000/evaluate`
-
----
-
-## Uso
-
-Realiza una petición POST con JSON que contenga la IP o dominio a evaluar.
-
-Ejemplo con `curl`:
-
-```bash
-curl -X POST http://127.0.0.1:5000/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"ip": "scanme.nmap.org"}'
-```
-
-Ejemplo de cuerpo JSON:
-
-```json
-{
-  "ip": "scanme.nmap.org"
-}
-```
-
----
-
-## Respuesta
-
-La API devolverá un JSON con los resultados de los módulos ejecutados, incluyendo el estado de cumplimiento y descripción detallada de cada parámetro evaluado.
-
----
-
-
-
 
