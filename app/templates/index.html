@@ -2,11 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>API Evaluación Automática de Seguridad</title>
+  <title>API Evaluación Automática de Seguridad - Resultados</title>
   <style>
-    body { font-family: monospace; padding: 20px; }
-    textarea { width: 100%; height: 400px; }
+    body { font-family: Arial, sans-serif; padding: 20px; }
     input, button { font-size: 1rem; padding: 5px; margin-top: 5px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+    h2 { margin-top: 40px; }
+    .nested-table { margin-left: 20px; width: auto; }
   </style>
 </head>
 <body>
@@ -17,20 +21,52 @@
     <button type="submit">Consultar</button>
   </form>
 
-  <textarea id="resultado" readonly></textarea>
+  <div id="resultados"></div>
 
   <script>
-    document.getElementById('form').addEventListener('submit', async (e) => {
+    // Función para crear tabla de clave-valor simple
+    function createTable(obj) {
+      if (typeof obj !== "object" || obj === null) return document.createTextNode(String(obj));
+      const table = document.createElement("table");
+      for (const key in obj) {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = key;
+        const td = document.createElement("td");
+
+        if (typeof obj[key] === "object" && obj[key] !== null) {
+          td.appendChild(createTable(obj[key]));
+        } else {
+          td.textContent = obj[key];
+        }
+
+        tr.appendChild(th);
+        tr.appendChild(td);
+        table.appendChild(tr);
+      }
+      return table;
+    }
+
+    document.getElementById("form").addEventListener("submit", async function(e) {
       e.preventDefault();
-      const ip = document.getElementById('ip').value;
+      const ip = document.getElementById("ip").value;
+      const resultadosDiv = document.getElementById("resultados");
+      resultadosDiv.innerHTML = "Cargando...";
       try {
         const res = await fetch(`/evaluacion/?ip_o_dominio=${encodeURIComponent(ip)}`, {
-          method: 'POST'
+          method: "POST"
         });
         const data = await res.json();
-        document.getElementById('resultado').value = JSON.stringify(data, null, 2);
+        resultadosDiv.innerHTML = "";
+
+        for (const section in data) {
+          const h2 = document.createElement("h2");
+          h2.textContent = section.charAt(0).toUpperCase() + section.slice(1);
+          resultadosDiv.appendChild(h2);
+          resultadosDiv.appendChild(createTable(data[section]));
+        }
       } catch (error) {
-        document.getElementById('resultado').value = "Error: " + error;
+        resultadosDiv.textContent = "Error: " + error;
       }
     });
   </script>
