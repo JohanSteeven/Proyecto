@@ -2,8 +2,26 @@ import subprocess
 import re
 
 def evaluate(ip_o_dominio: str) -> dict:
+    """
+    Evalúa la configuración criptográfica de un host remoto usando Nmap.
+
+    Realiza las siguientes comprobaciones:
+    - Protocolos SSL/TLS inseguros (SSLv2, SSLv3)
+    - Algoritmos criptográficos inseguros (RC4, MD5, SHA1, CBC)
+    - Suites de cifrado con claves menores a 256 bits
+    - Algoritmos robustos detectados (AES-256, RSA, ECDHE, ECDSA, ChaCha20)
+    - Algoritmos SSH inseguros y robustos
+    - Información del certificado SSL (emisor, validez, tamaño de clave, algoritmo de firma)
+
+    Args:
+        ip_o_dominio (str): IP o dominio a evaluar.
+
+    Returns:
+        dict: Resultados de la evaluación criptográfica, incluyendo errores si ocurren.
+    """
     resultado = {}
 
+    # Evaluación de protocolos y algoritmos SSL/TLS
     try:
         ssl_ciphers_raw = subprocess.check_output([
             "nmap", "-p", "443,465,993,995,8443",
@@ -39,6 +57,7 @@ def evaluate(ip_o_dominio: str) -> dict:
     except Exception as e:
         resultado["error_ssl_ciphers"] = str(e)
 
+    # Evaluación de algoritmos SSH
     try:
         ssh_algos_raw = subprocess.check_output([
             "nmap", "-p", "22",
@@ -57,6 +76,7 @@ def evaluate(ip_o_dominio: str) -> dict:
     except Exception as e:
         resultado["error_ssh_algos"] = str(e)
 
+    # Extracción de información del certificado SSL
     try:
         ssl_cert_raw = subprocess.check_output([
             "nmap", "-p", "443",

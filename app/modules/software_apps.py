@@ -2,6 +2,15 @@ import subprocess
 import re
 
 def procesar_http_headers(raw_output: str) -> dict:
+    """
+    Procesa la salida de nmap para extraer encabezados HTTP por puerto.
+
+    Args:
+        raw_output (str): Salida de nmap del script http-headers.
+
+    Returns:
+        dict: Diccionario con puertos como claves y encabezados HTTP como subdiccionarios.
+    """
     resultado = {}
     current_port = None
     headers = {}
@@ -31,6 +40,15 @@ def procesar_http_headers(raw_output: str) -> dict:
     return resultado
 
 def procesar_http_enum(raw_output: str) -> dict:
+    """
+    Procesa la salida de nmap para extraer rutas HTTP detectadas.
+
+    Args:
+        raw_output (str): Salida de nmap del script http-enum.
+
+    Returns:
+        dict: Diccionario con la lista de rutas detectadas.
+    """
     rutas = []
     for line in raw_output.splitlines():
         m = re.match(r"\|\s+(/[\w\-./]*)", line)
@@ -41,6 +59,15 @@ def procesar_http_enum(raw_output: str) -> dict:
     return {"rutas_detectadas": rutas}
 
 def procesar_cookies(raw_output: str) -> dict:
+    """
+    Procesa la salida de nmap para identificar cookies inseguras (sin Secure o HttpOnly).
+
+    Args:
+        raw_output (str): Salida de nmap del script http-cookie-flags.
+
+    Returns:
+        dict: Diccionario con la lista de cookies inseguras detectadas.
+    """
     cookies_inseguros = []
     for line in raw_output.splitlines():
         if "Set-Cookie" in line:
@@ -51,6 +78,20 @@ def procesar_cookies(raw_output: str) -> dict:
     return {"cookies_inseguros": cookies_inseguros}
 
 def evaluate(ip_o_dominio: str) -> dict:
+    """
+    Evalúa la configuración de aplicaciones web y encabezados HTTP de un host remoto usando Nmap.
+
+    Realiza las siguientes comprobaciones:
+    - Encabezados HTTP expuestos en puertos comunes.
+    - Rutas HTTP accesibles detectadas.
+    - Cookies inseguras (sin Secure o HttpOnly).
+
+    Args:
+        ip_o_dominio (str): IP o dominio a evaluar.
+
+    Returns:
+        dict: Resultados de la evaluación de aplicaciones web y encabezados HTTP.
+    """
     resultado = {}
 
     try:

@@ -1,7 +1,6 @@
-
 import nmap
 
-
+# Diccionario de servicios considerados inseguros y su descripción.
 INSEGURIDAD_SERVICIOS = {
     'ftp': "FTP no cifrado",
     'telnet': "Telnet inseguro sin cifrado",
@@ -17,15 +16,28 @@ INSEGURIDAD_SERVICIOS = {
     'rdp': "Escritorio remoto (RDP) sin autorización",
     'ssh': "SSH versión insegura",
     'smtp': "SMTP sin cifrado o autenticación",
-    
 }
 
-
+# Lista de cifrados considerados débiles en protocolos SSL/TLS.
 DEBIL_CIPHERS = ['rc4', 'md5', 'md4', 'sha1', 'des', '3des', 'cbc', 'sha']
 
 def evaluate(ip):
+    """
+    Evalúa la ciberseguridad de un host remoto usando nmap.
+
+    Realiza las siguientes comprobaciones:
+    - Detecta puertos abiertos y servicios asociados.
+    - Identifica servicios inseguros por nombre (ej: FTP, Telnet, SMBv1, etc).
+    - Detecta cifrados débiles en protocolos SSL/TLS usando el script ssl-enum-ciphers.
+
+    Args:
+        ip (str): IP o dominio a evaluar.
+
+    Returns:
+        dict: Resultados con puertos abiertos y servicios inseguros detectados.
+    """
     scanner = nmap.PortScanner()
-    # Escaneo con detección de versiones y scripts ssl-cert para info cifrado
+    # Escaneo con detección de versiones y scripts ssl-cert y ssl-enum-ciphers para información de cifrado.
     scanner.scan(ip, arguments='-sV --script ssl-cert,ssl-enum-ciphers')
 
     resultados = {
@@ -42,6 +54,7 @@ def evaluate(ip):
                 version = scanner[host][proto][port].get('version', '').lower()
                 extra_info = scanner[host][proto][port].get('extrainfo', '').lower()
 
+                # Agrega información básica del puerto abierto.
                 resultados["puertos_abiertos"].append({
                     "puerto": port,
                     "protocolo": proto,
@@ -51,7 +64,7 @@ def evaluate(ip):
                     "info_adicional": extra_info
                 })
 
-                # Detectar servicios inseguros por nombre
+                # Detectar servicios inseguros por nombre.
                 if service_name in INSEGURIDAD_SERVICIOS:
                     resultados["servicios_inseguros"].append({
                         "puerto": port,
@@ -59,8 +72,7 @@ def evaluate(ip):
                         "mensaje": f"Protocolo inseguro detectado: {INSEGURIDAD_SERVICIOS[service_name]}"
                     })
 
-
-                # Detectar cifrados débiles a través de scripts ssl-enum-ciphers (extra info)
+                # Detectar cifrados débiles a través de scripts ssl-enum-ciphers (extra info).
                 scripts = scanner[host][proto][port].get('scripts', {})
                 if 'ssl-enum-ciphers' in scripts:
                     cipher_info = scripts['ssl-enum-ciphers']
@@ -72,8 +84,6 @@ def evaluate(ip):
                                 "mensaje": f"Cifrado débil detectado en protocolo SSL/TLS: {weak_cipher.upper()}"
                             })
                             break
-
-                
 
     return resultados
 

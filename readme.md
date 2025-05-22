@@ -35,3 +35,19 @@ Este documento detalla los parámetros de seguridad que cada módulo implementad
 
 ---
 
+## 4. Módulo `auth.py`
+
+- Servicios de autenticación comunes activos en puertos estándar:
+  - FTP (21), SSH (22), Telnet (23), HTTP (80), POP3 (110), IMAP (143), LDAP (389), LDAPS (636), MySQL (3306), PostgreSQL (5432).
+- Detección de login no cifrado:
+  - FTP anónimo.
+  - Telnet sin cifrado.
+- Evaluación de autenticación HTTP:
+  - Autenticación básica.
+  - Autenticación por formulario.
+  
+---
+
+# Nota
+
+- Los parámetros que requieren acceso interno, políticas, auditorías o configuración detallada no son evaluables remotamente y no están implementados en estos módulos.
