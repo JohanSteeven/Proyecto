@@ -5,12 +5,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 templates = Jinja2Templates(directory="app/templates")
 
-app = FastAPI(
-    title="API Evaluación Automática de Seguridad",
-    description="Evalúa parámetros de ciberseguridad sobre una IP o dominio remoto.",
-    version="1.0.0"
-)
-
 app.include_router(evaluacion.router)
 
 @app.get("/", response_class=HTMLResponse)
