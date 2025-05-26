@@ -1,0 +1,97 @@
+body {
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+h1 {
+  color: #000000;
+  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 30px;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-top: 30px;
+  text-align: left;
+  color: #000000;
+}
+
+input,
+button {
+  font-size: 1rem;
+  padding: 10px;
+  margin-top: 5px;
+  width: 300px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+button {
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+  width: 150px;
+  margin-top: 20px;
+}
+
+button:hover {
+  background-color: #45a049;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 15px;
+  font-size: 1rem;
+  background-color: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+th,
+td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: left;
+}
+
+th {
+  background-color: #f2f2f2;
+  color: #333;
+  font-weight: bold;
+}
+
+td {
+  word-wrap: break-word;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+/* Colores para los estados */
+.safe {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.vulnerable {
+  background-color: #F44336;
+  color: white;
+}
+
+.intermediate {
+  background-color: #FFEB3B;
+  color: black;
+}
+
+.no-data {
+  background-color: #D3D3D3;
+}
+
+.nested-table {
+  margin-left: 20px;
+  width: auto;
+}
