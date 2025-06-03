@@ -26,13 +26,13 @@ def procesar_http_headers(raw_output: str) -> dict:
             headers = {}
             continue
 
-        header_match = re.match(r"\|\s+([^:]+):\s*(.*)", line)
+        header_match = re.match(r"\|\s+([^:]+):\s*(.*?)$", line)
         if header_match and current_port:
             key = header_match.group(1).strip()
             value = header_match.group(2).strip()
-            # Solo agregar si no está vacio
             if value:
                 headers[key] = value
+
 
     if current_port and headers:
         resultado[current_port] = headers
