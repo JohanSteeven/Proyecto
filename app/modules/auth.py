@@ -1,18 +1,10 @@
 import subprocess
 import re
+import httpx
 
 def ejecutar_nmap(ip, puertos, scripts, timeout=90):
     """
     Ejecuta un comando nmap con los puertos y scripts especificados sobre la IP/dominio dado.
-
-    Args:
-        ip (str): IP o dominio a escanear.
-        puertos (str): Puertos a escanear, separados por coma.
-        scripts (list): Lista de scripts nmap a ejecutar.
-        timeout (int): Tiempo máximo de espera en segundos.
-
-    Returns:
-        dict: Diccionario con estado ('ok' o 'error') y la salida del comando.
     """
     cmd = ["nmap", "-Pn", "--defeat-rst-ratelimit", "-p", puertos, "--script", ",".join(scripts), ip]
     try:
@@ -26,31 +18,44 @@ def ejecutar_nmap(ip, puertos, scripts, timeout=90):
 def parse_nmap_ports(raw_output):
     """
     Extrae el estado de puertos (open, filtered, closed) y servicios desde la salida de Nmap.
-
-    Args:
-        raw_output (str): Salida de nmap.
-
-    Returns:
-        dict: Diccionario con puertos como claves y su estado y servicio como valores.
     """
     puertos = {}
     lines = raw_output.splitlines()
+    # Se intentará extraer producto y versión si se encuentran (simplificado)
     for line in lines:
-        m = re.match(r"(\d+)/tcp\s+(\w+)\s+(\S+)", line)
+        m = re.match(r"(\d+)/tcp\s+(\w+)\s+(\S+)(?:\s+([\w\.\-]+))?(?:\s+([\w\.\-]+))?", line)
         if m:
-            puerto, estado, servicio = m.groups()
-            puertos[puerto] = {"estado": estado, "servicio": servicio}
+            puerto, estado, servicio = m.group(1), m.group(2), m.group(3).lower()
+            producto = m.group(4).lower() if m.group(4) else ""
+            version = m.group(5).lower() if m.group(5) else ""
+            puertos[puerto] = {
+                "estado": estado,
+                "servicio": servicio,
+                "producto": producto,
+                "version": version
+            }
     return puertos
+
+def buscar_vulnerabilidades_nvd(producto, version, max_results=3):
+    url = "https://services.nvd.nist.gov/rest/json/cves/1.0"
+    query = f"{producto} {version}".strip()
+    if not query:
+        return []
+    params = {
+        "keyword": query,
+        "resultsPerPage": max_results
+    }
+    try:
+        response = httpx.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("result", {}).get("CVE_Items", [])
+    except Exception as e:
+        return {"error": str(e)}
 
 def parse_ssh_auth_methods(raw_output):
     """
     Extrae métodos de autenticación SSH de la salida Nmap.
-
-    Args:
-        raw_output (str): Salida de nmap.
-
-    Returns:
-        list: Lista de métodos de autenticación SSH detectados.
     """
     methods = []
     match = re.search(r"ssh-auth-methods:\n((\s*\|\s+.*\n)+)", raw_output, re.MULTILINE)
@@ -63,16 +68,7 @@ def parse_ssh_auth_methods(raw_output):
 def evaluate(ip_o_dominio: str) -> dict:
     """
     Evalúa servicios de autenticación y login inseguros en una IP o dominio remoto usando nmap.
-
-    Realiza las siguientes comprobaciones:
-    - Escaneo de puertos comunes para servicios de autenticación.
-    - Detección de métodos de autenticación SSH si el puerto 22 está abierto.
-
-    Args:
-        ip_o_dominio (str): IP o dominio a evaluar.
-
-    Returns:
-        dict: Resultados de la evaluación de autenticación y login.
+    Además busca vulnerabilidades CVE asociadas a los productos y versiones detectados.
     """
     resultado = {}
 
@@ -83,9 +79,29 @@ def evaluate(ip_o_dominio: str) -> dict:
         resultado["puertos"] = puertos
         if ssh_methods:
             resultado["ssh_auth_methods"] = ssh_methods
+
+        # Buscar CVEs para cada servicio detectado que tenga producto y versión
+        vulnerabilidades = []
+        for puerto, info in puertos.items():
+            producto = info.get("producto", "")
+            version = info.get("version", "")
+            if producto and version:
+                cves = buscar_vulnerabilidades_nvd(producto, version)
+                if isinstance(cves, list) and cves:
+                    vulnerabilidades.append({
+                        "puerto": puerto,
+                        "servicio": info.get("servicio", ""),
+                        "producto": producto,
+                        "version": version,
+                        "vulnerabilidades": [{
+                            "id": cve["cve"]["CVE_data_meta"]["ID"],
+                            "descripcion": cve["cve"]["description"]["description_data"][0]["value"]
+                        } for cve in cves]
+                    })
+
+        resultado["vulnerabilidades_detectadas"] = vulnerabilidades
+
     else:
         resultado["error"] = r["output"]
-
-    # Otros escaneos (login inseguros, http auth) pueden tener parseo similar
 
     return resultado

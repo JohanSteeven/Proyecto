@@ -2,7 +2,7 @@ import nmap
 import httpx
 
 INSEGURIDAD_SERVICIOS = {
-     'ftp': "FTP no cifrado",
+    'ftp': "FTP no cifrado",
     'telnet': "Telnet inseguro sin cifrado",
     'smbv1': "SMB versión 1 vulnerable",
     'rlogin': "Rlogin inseguro",
@@ -19,6 +19,8 @@ INSEGURIDAD_SERVICIOS = {
 }
 
 DEBIL_CIPHERS = ['rc4', 'md5', 'md4', 'sha1', 'des', '3des', 'cbc', 'sha']
+
+_cache_cves = {}
 
 def escanear_host(ip):
     scanner = nmap.PortScanner()
@@ -41,8 +43,19 @@ def extraer_puertos_abiertos(scanner):
     return puertos_abiertos
 
 def buscar_vulnerabilidades_nvd(producto, version, max_results=3):
-    url = "https://services.nvd.nist.gov/rest/json/cves/1.0"
+    key = f"{producto}:{version}"
+    if key in _cache_cves:
+        return _cache_cves[key]
+
+    producto = producto.strip().lower()
+    version = version.strip().lower()
+    if not producto or producto in ['unknown', '']:
+        return []
     query = f"{producto} {version}".strip()
+    if len(query) < 3:
+        return []
+
+    url = "https://services.nvd.nist.gov/rest/json/cves/1.0"
     params = {
         "keyword": query,
         "resultsPerPage": max_results
@@ -51,9 +64,31 @@ def buscar_vulnerabilidades_nvd(producto, version, max_results=3):
         response = httpx.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
-        return data.get("result", {}).get("CVE_Items", [])
+        cves = data.get("result", {}).get("CVE_Items", [])
+        resultado_cves = []
+        for cve in cves:
+            cve_id = cve["cve"]["CVE_data_meta"]["ID"]
+            descripcion = cve["cve"]["description"]["description_data"][0]["value"]
+            cvss = cve.get("impact", {}).get("baseMetricV3", {}).get("cvssV3", {})
+            score = cvss.get("baseScore", "N/A")
+            severity = cvss.get("baseSeverity", "N/A")
+            url_cve = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+            resultado_cves.append({
+                "id": cve_id,
+                "descripcion": descripcion,
+                "cvss_score": score,
+                "severity": severity,
+                "url": url_cve
+            })
+
+        _cache_cves[key] = resultado_cves
+        return resultado_cves
+
     except Exception as e:
-        return {"error": str(e)}
+        # Aquí podrías loggear el error si tienes logger configurado
+        # print(f"Error consultando NVD para {query}: {e}")
+        _cache_cves[key] = []
+        return []
 
 def detectar_servicios_inseguros(scanner):
     servicios_inseguros = []
@@ -83,21 +118,17 @@ def detectar_servicios_inseguros(scanner):
                             })
                             break
 
-                # Buscar vulnerabilidades en NVD para producto y versión
-                producto = servicio_info.get('product', '')
-                version = servicio_info.get('version', '')
+                producto = servicio_info.get('product', '').strip()
+                version = servicio_info.get('version', '').strip()
                 if producto and version:
                     cves = buscar_vulnerabilidades_nvd(producto, version)
-                    if isinstance(cves, list) and cves:
+                    if cves:
                         vulnerabilidades.append({
                             "puerto": port,
                             "servicio": service_name,
                             "producto": producto,
                             "version": version,
-                            "vulnerabilidades": [{
-                                "id": cve["cve"]["CVE_data_meta"]["ID"],
-                                "descripcion": cve["cve"]["description"]["description_data"][0]["value"]
-                            } for cve in cves]
+                            "vulnerabilidades": cves
                         })
 
     return servicios_inseguros, vulnerabilidades
